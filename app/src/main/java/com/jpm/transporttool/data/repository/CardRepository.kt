@@ -110,4 +110,67 @@ class CardRepository(context: Context) {
     fun setProModeEnabled(enabled: Boolean) {
         appPrefs.edit().putBoolean("pro_mode", enabled).apply()
     }
+
+    fun exportData(): String {
+        val root = JSONObject()
+        val cardsArray = JSONArray()
+        getSavedCards().forEach {
+            val obj = JSONObject()
+            obj.put("n", it.name)
+            obj.put("p", it.uidPrefix)
+            obj.put("k", it.keyB)
+            obj.put("c", it.color)
+            obj.put("t", it.type.name)
+            cardsArray.put(obj)
+        }
+        root.put("cards", cardsArray)
+
+        val historyObj = JSONObject()
+        getAllHistoryUids().forEach { uid ->
+            val hArray = JSONArray()
+            loadHistoryForUid(uid).forEach { h ->
+                val o = JSONObject()
+                o.put("t", h.timestamp)
+                o.put("b", h.balance)
+                hArray.put(o)
+            }
+            historyObj.put(uid, hArray)
+        }
+        root.put("history", historyObj)
+        return root.toString()
+    }
+
+    fun importData(json: String): Boolean {
+        return try {
+            val root = JSONObject(json)
+            val cardsArray = root.getJSONArray("cards")
+            val newList = mutableListOf<TransportCard>()
+            for (i in 0 until cardsArray.length()) {
+                val obj = cardsArray.getJSONObject(i)
+                newList.add(TransportCard(
+                    obj.getString("n"),
+                    obj.getString("p"),
+                    obj.getString("k"),
+                    obj.optInt("c", -1),
+                    CardType.valueOf(obj.optString("t", "UNKNOWN"))
+                ))
+            }
+            saveCardList(newList)
+
+            val historyObj = root.getJSONObject("history")
+            val edit = historyPrefs.edit()
+            historyObj.keys().forEach { uid ->
+                edit.putString(uid, historyObj.getJSONArray(uid).toString())
+            }
+            edit.apply()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun clearAllData() {
+        appPrefs.edit().remove("cards").apply()
+        historyPrefs.edit().clear().apply()
+    }
 }

@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
         private const val BLOCK_34 = 34
         private const val BLOCK_36 = 36
         private const val BLOCK_37 = 37
+        private const val BLOCK_38 = 38
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,12 +128,16 @@ class MainActivity : ComponentActivity() {
                 ScanningOverlay(onDismiss = { viewModel.isScanningForNewCard = false })
             }
 
-            if (viewModel.isWaitingToWrite) {
+            if (viewModel.isWaitingToWrite || viewModel.isNormalizing) {
                 val cardCfg = viewModel.savedCards.find { viewModel.focusedUid.startsWith(it.uidPrefix) }
                 WritingOverlay(
-                    amount = viewModel.finalAmount,
+                    amount = if (viewModel.isNormalizing) 0f else viewModel.finalAmount,
                     cardName = cardCfg?.name ?: stringResource(R.string.unknown_card),
-                    onDismiss = { viewModel.isWaitingToWrite = false }
+                    isNormalizing = viewModel.isNormalizing,
+                    onDismiss = { 
+                        viewModel.isWaitingToWrite = false
+                        viewModel.isNormalizing = false
+                    }
                 )
             }
 
@@ -140,7 +145,9 @@ class MainActivity : ComponentActivity() {
                 visible = viewModel.showNfcBubble && !viewModel.isScanningForNewCard,
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 100.dp)
             ) {
                 Surface(
                     modifier = Modifier.padding(horizontal = 24.dp),
@@ -167,8 +174,12 @@ class MainActivity : ComponentActivity() {
             }
 
             if (viewModel.showSuccess) {
-                SuccessOverlay(amount = viewModel.finalAmount) {
+                SuccessOverlay(
+                    amount = viewModel.finalAmount,
+                    isRepair = viewModel.isRepairSuccess
+                ) {
                     viewModel.showSuccess = false
+                    viewModel.isRepairSuccess = false
                     viewModel.currentScreen = "home"
                 }
             }
@@ -178,6 +189,10 @@ class MainActivity : ComponentActivity() {
             }
             if (viewModel.showLegalDialog) {
                 LegalDialog(onDismiss = { viewModel.showLegalDialog = false })
+            }
+
+            if (viewModel.showSettingsDialog) {
+                SettingsOverlay(viewModel = viewModel, onDismiss = { viewModel.showSettingsDialog = false })
             }
         }
     }
@@ -224,12 +239,26 @@ class MainActivity : ComponentActivity() {
                 val firstByte = contractData[0].toInt() and 0xFF
                 Log.d("NFC_DEBUG", "Bloque 34 (Contrato) primer byte: ${String.format("%02X", firstByte)}")
                 
-                // Si el byte es 0x40 o 0x58 (comienzan por 0x40 o tienen bits específicos del perfil joven/nominativo)
-                // Basado en tu info, 0x40 es Joven. 0x58 parece ser una variante de Joven/Nominativa en tu tarjeta.
-                cardType = when (firstByte) {
-                    0x40, 0x58 -> com.jpm.transporttool.data.model.CardType.JOVEN
-                    0x18 -> com.jpm.transporttool.data.model.CardType.NORMAL
-                    else -> com.jpm.transporttool.data.model.CardType.UNKNOWN
+                // Evaluamos con la nueva regla de prioridad: Subtipo > Prefijo
+                val subType = contractData[8].toInt() and 0xFF
+                Log.d("NFC_DEBUG", "S8 - Byte0: ${String.format("%02X", firstByte)}, Byte8: ${String.format("%02X", subType)}")
+
+                cardType = when (subType) {
+                    0x03, 0x04 -> com.jpm.transporttool.data.model.CardType.JOVEN
+                    0x01 -> {
+                        // El 0x01 es perfil base; en prefijo 58 es Fam. Numerosa, en el resto suele ser Normal
+                        if (firstByte == 0x58) com.jpm.transporttool.data.model.CardType.FAMILIANUM
+                        else com.jpm.transporttool.data.model.CardType.NORMAL
+                    }
+                    else -> {
+                        // Fallback por prefijo si el subtipo es desconocido
+                        when (firstByte) {
+                            0x40 -> com.jpm.transporttool.data.model.CardType.JOVEN
+                            0x58 -> com.jpm.transporttool.data.model.CardType.FAMILIANUM
+                            0x18, 0x60 -> com.jpm.transporttool.data.model.CardType.NORMAL
+                            else -> com.jpm.transporttool.data.model.CardType.UNKNOWN
+                        }
+                    }
                 }
                 Log.d("NFC_DEBUG", "Tipo detectado S8: ${cardType.name}")
             }
@@ -244,37 +273,87 @@ class MainActivity : ComponentActivity() {
                 Log.d("NFC_DEBUG", "Bloque 36 (S9) byte 0: ${String.format("%02X", firstByte36)}")
                 
                 if (cardType == com.jpm.transporttool.data.model.CardType.UNKNOWN) {
-                    cardType = when (firstByte36) {
-                        0x40, 0x58 -> com.jpm.transporttool.data.model.CardType.JOVEN
-                        0x18 -> com.jpm.transporttool.data.model.CardType.NORMAL
-                        else -> com.jpm.transporttool.data.model.CardType.UNKNOWN
+                    val subType36 = contractData36[8].toInt() and 0xFF
+                    Log.d("NFC_DEBUG", "S9 - Byte0: ${String.format("%02X", firstByte36)}, Byte8: ${String.format("%02X", subType36)}")
+
+                    cardType = when (subType36) {
+                        0x03, 0x04 -> com.jpm.transporttool.data.model.CardType.JOVEN
+                        0x01 -> {
+                            if (firstByte36 == 0x58) com.jpm.transporttool.data.model.CardType.FAMILIANUM
+                            else com.jpm.transporttool.data.model.CardType.NORMAL
+                        }
+                        else -> {
+                            when (firstByte36) {
+                                0x40 -> com.jpm.transporttool.data.model.CardType.JOVEN
+                                0x58 -> com.jpm.transporttool.data.model.CardType.FAMILIANUM
+                                0x18, 0x60 -> com.jpm.transporttool.data.model.CardType.NORMAL
+                                else -> com.jpm.transporttool.data.model.CardType.UNKNOWN
+                            }
+                        }
                     }
                     Log.d("NFC_DEBUG", "Tipo detectado S9: ${cardType.name}")
                 }
 
                 val data = mifare.readBlock(BLOCK_37)
                 val bal = NfcUtils.parseBalance(data)
-                Log.d("NFC_DEBUG", "Saldo leído: $bal")
+                Log.d("NFC_DEBUG", "Saldo leído B37: $bal")
+
+                // Detectar si el bloque 38 es igual al 37
+                try {
+                    val data38 = mifare.readBlock(BLOCK_38)
+                    val bal38 = NfcUtils.parseBalance(data38)
+                    Log.d("NFC_DEBUG", "Saldo leído B38: $bal38")
+
+                    viewModel.isCardCorrupted = !data.contentEquals(data38)
+                    if (viewModel.isCardCorrupted) {
+                        Log.w("NFC_DEBUG", "¡AVISO! Datos de bloques 37 y 38 no coinciden")
+                    }
+                } catch (e: Exception) {
+                    Log.e("NFC_DEBUG", "Error leyendo bloque 38 para verificación", e)
+                    viewModel.isCardCorrupted = true
+                }
 
                 viewModel.focusedUid = uid
                 
-                // Actualizar o crear configuración si el tipo cambió o es nuevo
-                val existing = viewModel.savedCards.find { it.uidPrefix == uid }
-                if (existing == null || existing.type != cardType) {
-                    val name = when(cardType) {
-                        com.jpm.transporttool.data.model.CardType.NORMAL -> "Tarjeta General"
-                        com.jpm.transporttool.data.model.CardType.JOVEN -> "Tarjeta Joven"
-                        else -> existing?.name ?: "Tarjeta Desconocida"
+                // Buscar configuración existente por UID completo o por prefijo (ej. si se añadió manualmente)
+                val existing = viewModel.savedCards.find { uid.startsWith(it.uidPrefix) }
+                
+                val detectedName = when(cardType) {
+                    com.jpm.transporttool.data.model.CardType.NORMAL -> "Monedero Consorcio"
+                    com.jpm.transporttool.data.model.CardType.FAMILIANUM -> "Familia Numerosa"
+                    com.jpm.transporttool.data.model.CardType.JOVEN -> "Tarjeta Joven"
+                    else -> null
+                }
+
+                // Decidimos si necesita actualización: si no existe, si el tipo cambió, o si el nombre es genérico y debe ser específico
+                val isGenericName = existing?.name == "Tarjeta General" || existing?.name == "Monedero Consorcio"
+                val needsUpdate = existing == null || 
+                                 (cardType != com.jpm.transporttool.data.model.CardType.UNKNOWN && existing.type != cardType) ||
+                                 (detectedName != null && isGenericName && existing.name != detectedName)
+
+                if (needsUpdate) {
+                    val finalName = if (existing != null && !isGenericName) {
+                        existing.name // Respetar nombre personalizado si el usuario lo cambió
+                    } else {
+                        detectedName ?: existing?.name ?: "Tarjeta Desconocida"
                     }
+
+                    Log.d("NFC_DEBUG", "Actualizando/Creando tarjeta: $finalName (Tipo: ${cardType.name})")
+                    
                     viewModel.saveNewCard(
                         com.jpm.transporttool.data.model.TransportCard(
-                            name = name,
-                            uidPrefix = uid,
+                            name = finalName,
+                            uidPrefix = uid, // Guardamos el UID completo
                             keyB = existing?.keyB ?: "",
-                            color = existing?.color ?: cardType.defaultColor.toArgb(),
+                            color = if (existing?.type != cardType) cardType.defaultColor.toArgb() else (existing?.color ?: cardType.defaultColor.toArgb()),
                             type = cardType
                         )
                     )
+                    
+                    // Si el prefijo era parcial (ej. "58"), eliminamos la configuración antigua para evitar duplicados
+                    if (existing != null && existing.uidPrefix != uid) {
+                        viewModel.deleteCardConfig(existing.uidPrefix)
+                    }
                 }
 
                 viewModel.addToHistory(uid, bal)
@@ -307,10 +386,14 @@ class MainActivity : ComponentActivity() {
             
             if (auth) {
                 val valueBlock = NfcUtils.buildValueBlock((amount * 200).toInt())
+                
                 Log.d("NFC_WRITE", "Escribiendo bloque 37: ${NfcUtils.bytesToHex(valueBlock)}")
                 mifare.writeBlock(BLOCK_37, valueBlock)
                 
-                // Verificación inmediata
+                Log.d("NFC_WRITE", "Escribiendo bloque 38 (backup): ${NfcUtils.bytesToHex(valueBlock)}")
+                mifare.writeBlock(BLOCK_38, valueBlock)
+                
+                // Verificación inmediata (del bloque principal)
                 val verifiedData = mifare.readBlock(BLOCK_37)
                 if (verifiedData != null && verifiedData.size >= 16) {
                     val verifiedAmount = NfcUtils.parseBalance(verifiedData)
@@ -320,6 +403,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.finalAmount = amount
                 viewModel.showSuccess = true
                 viewModel.isWaitingToWrite = false
+                viewModel.isCardCorrupted = false // Limpiar estado tras escritura exitosa
                 viewModel.addToHistory(uid, amount.toDouble())
             } else {
                 runOnUiThread { Toast.makeText(this, "Error de autenticación con Key B", Toast.LENGTH_SHORT).show() }
@@ -341,6 +425,29 @@ class MainActivity : ComponentActivity() {
             if (viewModel.isWaitingToWrite) {
                 val cardCfg = viewModel.savedCards.find { viewModel.focusedUid.startsWith(it.uidPrefix) }
                 writeBalance(viewModel.focusedUid, viewModel.finalAmount, cardCfg?.keyB ?: "")
+            } else if (viewModel.isNormalizing) {
+                val cardCfg = viewModel.savedCards.find { viewModel.focusedUid.startsWith(it.uidPrefix) }
+                if (cardCfg != null && cardCfg.keyB.isNotEmpty()) {
+                    // Re-leer saldo actual para normalizar
+                    val mifare = MifareClassic.get(tag)
+                    try {
+                        mifare.connect()
+                        if (mifare.authenticateSectorWithKeyA(SECTOR_9, NfcUtils.hexToBytes(KEY_A_SECTOR_9))) {
+                            val data = mifare.readBlock(BLOCK_37)
+                            val currentBal = NfcUtils.parseBalance(data)
+                            mifare.close()
+                            viewModel.isRepairSuccess = true
+                            writeBalance(viewModel.focusedUid, currentBal.toFloat(), cardCfg.keyB)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("NFC_NORMALIZE", "Error al normalizar", e)
+                    } finally {
+                        viewModel.isNormalizing = false
+                    }
+                } else {
+                    viewModel.isNormalizing = false
+                    runOnUiThread { Toast.makeText(this, "Se necesita KEY B configurada para normalizar", Toast.LENGTH_SHORT).show() }
+                }
             } else {
                 readCardBalance(tag)
             }

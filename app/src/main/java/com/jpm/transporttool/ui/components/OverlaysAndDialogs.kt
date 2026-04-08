@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.TrendingFlat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,11 +30,194 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jpm.transporttool.R
 import com.jpm.transporttool.data.model.TransportCard
+import com.jpm.transporttool.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
+
+@Composable
+fun SettingsOverlay(viewModel: MainViewModel, onDismiss: () -> Unit) {
+    var showDeleteAllConfirm by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importText by remember { mutableStateOf("") }
+    val clipboardManager = LocalClipboardManager.current
+    val scrollState = rememberScrollState()
+
+    if (showDeleteAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllConfirm = false },
+            title = { Text("¿Eliminar todo?", fontWeight = FontWeight.Bold, color = Color.Red) },
+            text = { Text("Esta acción borrará todas tus tarjetas guardadas y el historial de forma permanente. No se puede deshacer.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearAllData()
+                        showDeleteAllConfirm = false
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                ) { Text("Eliminar definitivamente") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteAllConfirm = false }) { Text("Cancelar") } }
+        )
+    }
+
+    if (showImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text("Importar datos") },
+            text = {
+                Column {
+                    Text("Pega aquí el código JSON de tu respaldo. Esto añadirá las tarjetas y el historial al listado actual.", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = importText,
+                        onValueChange = { importText = it },
+                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                        placeholder = { Text("{ \"cards\": [...] }") },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (viewModel.importData(importText)) {
+                            showImportDialog = false
+                            onDismiss()
+                        }
+                    },
+                    enabled = importText.isNotBlank()
+                ) { Text("Importar") }
+            },
+            dismissButton = { TextButton(onClick = { showImportDialog = false }) { Text("Cancelar") } }
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.45f))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(320.dp)
+                .padding(16.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(scrollState)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Ajustes", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // SECCIÓN MODO PRO
+                Text("Avanzado", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = if (viewModel.isProMode) MaterialTheme.colorScheme.primaryContainer.copy(0.3f) else Color.Transparent,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Modo Pro", fontWeight = FontWeight.Bold)
+                            Text("Permite edición de llaves y saldo", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = viewModel.isProMode,
+                            onCheckedChange = { viewModel.toggleProMode() }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // SECCIÓN DATOS
+                Text("Datos y Respaldo", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                SettingsItem(
+                    icon = Icons.Default.FileUpload,
+                    title = "Exportar tarjetas",
+                    subtitle = "Copia un respaldo al portapapeles",
+                    onClick = {
+                        val json = viewModel.exportData()
+                        clipboardManager.setText(AnnotatedString(json))
+                    }
+                )
+                
+                SettingsItem(
+                    icon = Icons.Default.FileDownload,
+                    title = "Importar tarjetas",
+                    subtitle = "Restaura desde un código JSON",
+                    onClick = { showImportDialog = true }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                SettingsItem(
+                    icon = Icons.Default.DeleteForever,
+                    title = "Borrar todo",
+                    subtitle = "Elimina tarjetas e historial",
+                    color = Color.Red,
+                    onClick = { showDeleteAllConfirm = true }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) { Text("Cerrar") }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    color: Color = Color.Unspecified,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = if (color == Color.Red) color else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.SemiBold, color = if (color == Color.Red) color else Color.Unspecified)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+}
 
 @Composable
 fun ScanningOverlay(onDismiss: () -> Unit) {
@@ -157,7 +342,7 @@ fun NfcAnimation(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun WritingOverlay(amount: Float, cardName: String, onDismiss: () -> Unit) {
+fun WritingOverlay(amount: Float, cardName: String, isNormalizing: Boolean = false, onDismiss: () -> Unit) {
     BackHandler { onDismiss() }
 
     Box(
@@ -173,19 +358,21 @@ fun WritingOverlay(amount: Float, cardName: String, onDismiss: () -> Unit) {
             
             Spacer(modifier = Modifier.height(32.dp))
             Text(
-                stringResource(R.string.writing_balance_title),
+                if (isNormalizing) "Reparando tarjeta..." else stringResource(R.string.writing_balance_title),
                 color = Color.White,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = stringResource(R.string.writing_balance_msg, amount.toDouble()),
-                color = Color.White.copy(0.7f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyLarge
-            )
+            if (!isNormalizing) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.writing_balance_msg, amount.toDouble()),
+                    color = Color.White.copy(0.7f),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
@@ -259,10 +446,10 @@ fun FallingBills() {
 }
 
 @Composable
-fun SuccessOverlay(amount: Float, onDismiss: () -> Unit) {
+fun SuccessOverlay(amount: Float, isRepair: Boolean = false, onDismiss: () -> Unit) {
     val animProgress = remember { Animatable(0f) }
     val checkAnim = remember { Animatable(0f) }
-    val showBills = amount >= 50f
+    val showBills = amount >= 50f && !isRepair
     var startFalling by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -295,7 +482,11 @@ fun SuccessOverlay(amount: Float, onDismiss: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(40.dp)); AnimatedVisibility(visible = animProgress.value > 0.8f, enter = slideInVertically { it } + fadeIn()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.operation_completed), color = Color.White.copy(0.7f), fontSize = 16.sp); Spacer(modifier = Modifier.height(8.dp)); Text(stringResource(R.string.balance_format, amount), color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.graphicsLayer(scaleX = checkAnim.value, scaleY = checkAnim.value))
+                Text(if (isRepair) "Tarjeta reparada" else stringResource(R.string.operation_completed), color = Color.White.copy(0.7f), fontSize = 16.sp); 
+                if (!isRepair) {
+                    Spacer(modifier = Modifier.height(8.dp)); 
+                    Text(stringResource(R.string.balance_format, amount), color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.graphicsLayer(scaleX = checkAnim.value, scaleY = checkAnim.value))
+                }
             }
         }
         }
@@ -412,15 +603,23 @@ fun LegalDialog(onDismiss: () -> Unit) {
 fun HelpDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = MaterialTheme.colorScheme.primary) },
         title = { Text(stringResource(R.string.how_to_use), fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                HelpStep("1", stringResource(R.string.help_step_1))
-                HelpStep("2", stringResource(R.string.help_step_2))
-                HelpStep("3", stringResource(R.string.help_step_3))
-                HelpStep("4", stringResource(R.string.help_step_4))
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                HelpStep("1", stringResource(R.string.help_step_1), Icons.Default.Nfc)
+                HelpStep("2", stringResource(R.string.help_step_2), Icons.AutoMirrored.Filled.TrendingFlat)
+                HelpStep("3", stringResource(R.string.help_step_3), Icons.Default.TouchApp)
+                HelpStep("4", stringResource(R.string.help_step_4), Icons.Default.Edit)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.understood)) } }
+        confirmButton = { 
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp)
+            ) { 
+                Text(stringResource(R.string.understood)) 
+            } 
+        }
     )
 }

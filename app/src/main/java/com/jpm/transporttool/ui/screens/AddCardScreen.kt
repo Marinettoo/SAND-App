@@ -96,7 +96,7 @@ fun AddCardScreen(viewModel: MainViewModel) {
                 TextButton(
                     onClick = {
                         keyboardController?.hide()
-                        viewModel.saveNewCardList(viewModel.savedCards.filter { it.uidPrefix != prefix })
+                        viewModel.deleteCardConfig(prefix)
                         viewModel.currentScreen = "home"
                     },
                     modifier = Modifier.fillMaxWidth()

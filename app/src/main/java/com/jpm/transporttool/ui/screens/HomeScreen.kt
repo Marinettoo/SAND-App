@@ -24,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,7 +37,6 @@ import com.jpm.transporttool.ui.viewmodel.MainViewModel
 fun HomeScreen(viewModel: MainViewModel) {
     val pagerState = rememberPagerState(pageCount = { viewModel.displayUids.size + 1 })
     val isDark = isSystemInDarkTheme()
-    val haptic = LocalHapticFeedback.current
 
     val blurRadius by animateDpAsState(if (viewModel.showCardOptions) 16.dp else 0.dp, label = "blur")
 
@@ -54,7 +52,7 @@ fun HomeScreen(viewModel: MainViewModel) {
         animationSpec = tween(600), label = "dynamic_bg"
     )
 
-    LaunchedEffect(viewModel.displayUids) {
+    LaunchedEffect(viewModel.focusedUid) {
         if (viewModel.displayUids.isNotEmpty() && viewModel.focusedUid.isNotEmpty()) {
             val index = viewModel.displayUids.indexOf(viewModel.focusedUid)
             if (index != -1) pagerState.animateScrollToPage(index)
@@ -108,20 +106,8 @@ fun HomeScreen(viewModel: MainViewModel) {
                     title = { Logo(text = stringResource(R.string.logo_short), isMini = true) },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = dynamicBgColor),
                     actions = {
-                        IconButton(onClick = { 
-                            if (!viewModel.isProMode) {
-                                showProConfirm = true 
-                            } else {
-                                viewModel.toggleProMode()
-                            }
-                        }) {
-                            Icon(
-                                if (viewModel.isProMode) Icons.Default.LockOpen else Icons.Default.Lock,
-                                contentDescription = "Modo Pro",
-                                tint = if (viewModel.isProMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                        IconButton(onClick = { viewModel.showLegalDialog = true }) { Icon(Icons.Default.Gavel, null) }
+                        IconButton(onClick = { viewModel.showSettingsDialog = true }) { Icon(Icons.Default.Settings, "Ajustes") }
+                        IconButton(onClick = { viewModel.showLegalDialog = true }) { Icon(Icons.Default.Security, null) }
                         IconButton(onClick = { viewModel.showHelpDialog = true }) { Icon(Icons.AutoMirrored.Filled.HelpOutline, null) }
                     }
                 )
@@ -224,10 +210,56 @@ fun HomeScreen(viewModel: MainViewModel) {
                                     modifier = Modifier.padding(vertical = 20.dp)
                                 )
                             } else {
-                                HistorySection(
-                                    uid = targetUid,
-                                    viewModel = viewModel
-                                )
+                                Column {
+                                    // Indicadores de estado físico de la tarjeta (solo si es la enfocada actualmente)
+                                    if (targetUid == viewModel.focusedUid) {
+                                        if (viewModel.isCardCorrupted) {
+                                            Surface(
+                                                modifier = Modifier.padding(bottom = 16.dp).fillMaxWidth(),
+                                                color = MaterialTheme.colorScheme.errorContainer,
+                                                shape = RoundedCornerShape(16.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text("Datos inconsistentes", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                                    }
+                                                    Button(
+                                                        onClick = { viewModel.normalizeCard() },
+                                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                                    ) {
+                                                        Text("Reparar", style = MaterialTheme.typography.labelMedium)
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            Surface(
+                                                modifier = Modifier.padding(bottom = 12.dp),
+                                                color = Color(0xFFE8F5E9),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(12.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Tarjeta íntegra", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    HistorySection(
+                                        uid = targetUid,
+                                        viewModel = viewModel
+                                    )
+                                }
                             }
                         }
                     }
@@ -236,7 +268,40 @@ fun HomeScreen(viewModel: MainViewModel) {
             }
         }
 
-        // CardOptionsOverlay ha sido eliminado ya que sus funciones se han integrado en el reverso de la tarjeta y el modal de recarga
+        if (viewModel.isScanningForNewCard) {
+            ScanningOverlay(onDismiss = { viewModel.isScanningForNewCard = false })
+        }
+
+        if (viewModel.isWaitingToWrite) {
+            val cardCfg = viewModel.savedCards.find { viewModel.focusedUid.startsWith(it.uidPrefix) }
+            WritingOverlay(
+                amount = viewModel.finalAmount,
+                cardName = cardCfg?.name ?: stringResource(R.string.unknown_card),
+                onDismiss = { viewModel.isWaitingToWrite = false }
+            )
+        }
+
+        if (viewModel.isNormalizing) {
+            val cardCfg = viewModel.savedCards.find { viewModel.focusedUid.startsWith(it.uidPrefix) }
+            WritingOverlay(
+                amount = 0f,
+                cardName = cardCfg?.name ?: stringResource(R.string.unknown_card),
+                isNormalizing = true,
+                onDismiss = { viewModel.isNormalizing = false }
+            )
+        }
+
+        if (viewModel.showLegalDialog) {
+            LegalDialog(onDismiss = { viewModel.showLegalDialog = false })
+        }
+
+        if (viewModel.showHelpDialog) {
+            HelpDialog(onDismiss = { viewModel.showHelpDialog = false })
+        }
+
+        if (viewModel.showSettingsDialog) {
+            SettingsOverlay(viewModel = viewModel, onDismiss = { viewModel.showSettingsDialog = false })
+        }
     }
 }
 

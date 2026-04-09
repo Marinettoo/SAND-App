@@ -9,7 +9,8 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="SaldoAND"
-        android:theme="@style/Theme.JPM_Transport_Tool">
+        android:theme="@style/Theme.JPM_Transport_Tool"
+        android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"

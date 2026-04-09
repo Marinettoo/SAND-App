@@ -34,6 +34,11 @@ class MainViewModel(private val repository: CardRepository) : ViewModel() {
 
     var showHelpDialog by mutableStateOf(false)
     var showLegalDialog by mutableStateOf(false)
+    var showSettingsDialog by mutableStateOf(false)
+
+    var isCardCorrupted by mutableStateOf(false)
+    var isNormalizing by mutableStateOf(false)
+    var isRepairSuccess by mutableStateOf(false)
 
     var refreshTrigger by mutableStateOf(0)
 
@@ -43,6 +48,19 @@ class MainViewModel(private val repository: CardRepository) : ViewModel() {
     fun toggleProMode() {
         isProMode = !isProMode
         repository.setProModeEnabled(isProMode)
+    }
+
+    fun exportData(): String = repository.exportData()
+
+    fun importData(json: String): Boolean {
+        val success = repository.importData(json)
+        if (success) loadDataAndRefreshDisplay()
+        return success
+    }
+
+    fun clearAllData() {
+        repository.clearAllData()
+        loadDataAndRefreshDisplay()
     }
 
     init {
@@ -71,12 +89,14 @@ class MainViewModel(private val repository: CardRepository) : ViewModel() {
     }
 
     fun saveNewCard(card: TransportCard) {
-        val newList = savedCards.filter { it.uidPrefix != card.uidPrefix } + card
-        repository.saveCardList(newList)
-        loadDataAndRefreshDisplay()
-    }
-
-    fun saveNewCardList(newList: List<TransportCard>) {
+        val existingIndex = savedCards.indexOfFirst { it.uidPrefix == card.uidPrefix }
+        val newList = if (existingIndex != -1) {
+            savedCards.toMutableList().apply {
+                this[existingIndex] = card
+            }
+        } else {
+            savedCards + card
+        }
         repository.saveCardList(newList)
         loadDataAndRefreshDisplay()
     }
@@ -103,12 +123,21 @@ class MainViewModel(private val repository: CardRepository) : ViewModel() {
     fun deleteCardConfig(uidPrefix: String) {
         val newList = savedCards.filter { it.uidPrefix != uidPrefix }
         repository.saveCardList(newList)
+        // También eliminamos el historial asociado para que desaparezca del carrusel por completo
+        val allUids = repository.getAllHistoryUids()
+        allUids.filter { it.startsWith(uidPrefix) }.forEach {
+            repository.deleteFullHistory(it)
+        }
         loadDataAndRefreshDisplay()
     }
     
     fun isDisclaimerAccepted(): Boolean = repository.isDisclaimerAccepted()
     
     fun setDisclaimerAccepted(accepted: Boolean) = repository.setDisclaimerAccepted(accepted)
+
+    fun normalizeCard() {
+        isNormalizing = true
+    }
 }
 
 // Simple property delegate for Float since mutableFloatStateOf is not always available in older Compose

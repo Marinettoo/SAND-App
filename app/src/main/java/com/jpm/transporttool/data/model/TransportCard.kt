@@ -16,5 +16,6 @@ data class TransportCard(
 enum class CardType(val label: String, val defaultColor: Color, val imageRes: Int?, val contentColor: Color = Color.White) {
     NORMAL("Monedero Consorcio", Color(0xFF1976D2), R.drawable.monedero, Color.White),
     JOVEN("Tarjeta Joven", Color(0xFFD32F2F), R.drawable.tarjeta_joven, Color(0xFF00853E)), // Verde Consorcio/Junta
+    FAMILIANUM("Familia Numerosa", Color(0xFF1976D2), R.drawable.f_numerosa, Color.White),
     UNKNOWN("Desconocida", Color(0xFF757575), null, Color.White)
 }

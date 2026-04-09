@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">SAND_APP</string>
-    <string name="disclaimer_title">Aviso Legal</string>
-    <string name="disclaimer_text">⚠️ DESCARGO DE RESPONSABILIDAD (DISCLAIMER)\n\nSALDO ANDALUCIA es una herramienta desarrollada exclusivamente con fines educativos y de investigación académica.\n\nEl objetivo de este software es el estudio de la seguridad en sistemas de radiofrecuencia (RFID/NFC) y el análisis de vulnerabilidades en protocolos MIFARE.\n\nEl AUTOR NO SE HACE RESPONSABLE del mal uso que se le pueda dar a esta aplicación. El usuario final asume toda la responsabilidad legal derivada de la modificación, clonación o alteración de sistemas de acceso o pago de los que no sea legítimo propietario o administrador.\n\nEl uso de esta herramienta para evadir pagos, acceder a recintos privados sin autorización o alterar títulos de transporte público puede constituir un delito según la legislación vigente (Art. 248 y siguientes del Código Penal en España sobre estafa informática y uso de instrumentos de pago).\n\nAl continuar, aceptas usar este software bajo tu propia responsabilidad.</string>
+    <string name="disclaimer_title">Acuerdo de Usuario y Responsabilidad Legal</string>
+    <string name="disclaimer_text">El uso de SAND (Saldo Andalucía) está sujeto a la aceptación estricta de los siguientes términos y condiciones:\n\n1. FINALIDAD EDUCATIVA Y DE AUDITORÍA\nEsta herramienta ha sido desarrollada con propósitos exclusivamente educativos, de investigación académica y auditoría de seguridad personal en sistemas de radiofrecuencia (RFID/NFC) bajo protocolos MIFARE.\n\n2. LIMITACIÓN DE RESPONSABILIDAD\nEl desarrollador declina toda responsabilidad por el uso indebido, ilícito o fraudulento de este software. La aplicación se proporciona \"tal cual\", sin garantías de ningún tipo.\n\n3. CUMPLIMIENTO LEGAL\nQueda terminantemente prohibido el uso de esta herramienta para alterar, clonar o manipular sistemas de pago o acceso de los cuales el usuario no sea el propietario legítimo o cuente con autorización explícita. El usuario asume de forma única y exclusiva las consecuencias civiles o penales derivadas de infringir la legislación vigente.\n\n4. CONSENTIMIENTO\nAl pulsar \"Continuar\", el usuario declara haber leído íntegramente este aviso, comprender su alcance legal y se compromete a utilizar la herramienta dentro de los márgenes de la ley y la ética profesional.</string>
     <string name="disclaimer_accept">He leído y acepto los términos</string>
     <string name="continue_button">Continuar</string>
     <string name="by_author">By: Marinetto &amp; CrIsTiiAnPvP</string>
@@ -24,10 +24,20 @@
     <string name="legal_info">Información Legal</string>
     <string name="understood">Entendido</string>
     <string name="how_to_use">Cómo usar la App</string>
-    <string name="help_step_1">Pulsa en la tarjeta \u0027+\u0027 o aproxima directamente una tarjeta NFC para leerla.</string>
-    <string name="help_step_2">Desliza lateralmente para ver el historial de tus tarjetas.</string>
-    <string name="help_step_3">Mantén pulsada una tarjeta para ver opciones de personalización.</string>
-    <string name="help_step_4">Usa \u0027Modificar saldo\u0027 para grabar un nuevo valor si tienes la Key B guardada.</string>
+    <string name="help_step_1_title">Lectura NFC</string>
+    <string name="help_step_1_desc">Acerca tu tarjeta física a la parte trasera del móvil o pulsa el botón (+) para añadirla a la app.</string>
+    <string name="help_step_2_title">Gestión de tarjetas</string>
+    <string name="help_step_2_desc">Desliza a los lados para moverte entre tus tarjetas guardadas. Cada tarjeta mantiene su propio historial.</string>
+    <string name="help_step_3_title">Personalización</string>
+    <string name="help_step_3_desc">Toca el icono de ajustes en la esquina de una tarjeta para darle la vuelta. Podrás cambiar su nombre y color.</string>
+    <string name="help_step_4_title">Historial Detallado</string>
+    <string name="help_step_4_desc">Bajo cada tarjeta verás sus últimas lecturas. Puedes desplegar el historial completo para ver todos los movimientos.</string>
+    <string name="help_step_5_title">Edición de Saldo</string>
+    <string name="help_step_5_desc">Con el Modo Pro activado, pulsa en el saldo para modificarlo. Necesitarás tener guardada la Key B de la tarjeta.</string>
+    <string name="help_step_6_title">Reparación de Errores</string>
+    <string name="help_step_6_desc">Si detectamos datos corruptos, aparecerá un botón de Reparar. Úsalo y acerca de nuevo la tarjeta al móvil.</string>
+    <string name="next">Siguiente</string>
+    <string name="finish">Finalizar</string>
     <string name="reading_history">Historial de lecturas</string>
     <string name="add_card_for_history">Añade una tarjeta para ver su historial</string>
     <string name="no_readings">No hay lecturas registradas</string>

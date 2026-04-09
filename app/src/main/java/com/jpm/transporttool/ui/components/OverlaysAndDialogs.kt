@@ -3,7 +3,9 @@ package com.jpm.transporttool.ui.components
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,6 +40,7 @@ import com.jpm.transporttool.R
 import com.jpm.transporttool.data.model.TransportCard
 import com.jpm.transporttool.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsOverlay(viewModel: MainViewModel, onDismiss: () -> Unit) {
@@ -182,6 +185,22 @@ fun SettingsOverlay(viewModel: MainViewModel, onDismiss: () -> Unit) {
                     subtitle = "Elimina tarjetas e historial",
                     color = Color.Red,
                     onClick = { showDeleteAllConfirm = true }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // SECCIÓN INFO
+                Text("Información", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SettingsItem(
+                    icon = Icons.Default.Security,
+                    title = "Aviso Legal",
+                    subtitle = "Términos y cumplimiento",
+                    onClick = {
+                        onDismiss()
+                        viewModel.showLegalDialog = true
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -583,43 +602,214 @@ fun CardOptionsOverlay(
 
 @Composable
 fun LegalDialog(onDismiss: () -> Unit) {
+    val scrollState = rememberScrollState()
+    
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.legal_info), fontWeight = FontWeight.Bold) },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .padding(24.dp)
+            .fillMaxWidth(),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Security, 
+                    null, 
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = stringResource(R.string.disclaimer_text),
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Justify
+                    stringResource(R.string.legal_info), 
+                    fontWeight = FontWeight.ExtraBold,
+                    style = MaterialTheme.typography.titleLarge
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.understood)) } }
-    )
-}
-
-@Composable
-fun HelpDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text(stringResource(R.string.how_to_use), fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                HelpStep("1", stringResource(R.string.help_step_1), Icons.Default.Nfc)
-                HelpStep("2", stringResource(R.string.help_step_2), Icons.AutoMirrored.Filled.TrendingFlat)
-                HelpStep("3", stringResource(R.string.help_step_3), Icons.Default.TouchApp)
-                HelpStep("4", stringResource(R.string.help_step_4), Icons.Default.Edit)
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Text(
+                        text = "PROTOCOLO DE SEGURIDAD",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .verticalScroll(scrollState)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.disclaimer_text),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                lineHeight = 24.sp,
+                                letterSpacing = 0.2.sp
+                            ),
+                            textAlign = TextAlign.Justify,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         },
-        confirmButton = { 
+        confirmButton = {
             Button(
                 onClick = onDismiss,
-                shape = RoundedCornerShape(12.dp)
-            ) { 
-                Text(stringResource(R.string.understood)) 
-            } 
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    stringResource(R.string.understood).uppercase(),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
         }
     )
 }
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun HelpDialog(onDismiss: () -> Unit) {
+    val steps = listOf(
+        HelpStepData(stringResource(R.string.help_step_1_title), stringResource(R.string.help_step_1_desc), Icons.Default.Nfc, MaterialTheme.colorScheme.primary),
+        HelpStepData(stringResource(R.string.help_step_2_title), stringResource(R.string.help_step_2_desc), Icons.Default.SwapHoriz, Color(0xFF4CAF50)),
+        HelpStepData(stringResource(R.string.help_step_3_title), stringResource(R.string.help_step_3_desc), Icons.Default.Settings, Color(0xFFFF9800)),
+        HelpStepData(stringResource(R.string.help_step_4_title), stringResource(R.string.help_step_4_desc), Icons.Default.History, Color(0xFF2196F3)),
+        HelpStepData(stringResource(R.string.help_step_5_title), stringResource(R.string.help_step_5_desc), Icons.Default.AccountBalanceWallet, Color(0xFF9C27B0)),
+        HelpStepData(stringResource(R.string.help_step_6_title), stringResource(R.string.help_step_6_desc), Icons.Default.Build, Color(0xFFF44336))
+    )
+
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState { steps.size }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.padding(24.dp).fillMaxWidth(),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Guía de uso", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().height(280.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                androidx.compose.foundation.pager.HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f)
+                ) { page ->
+                    val step = steps[page]
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(80.dp),
+                            shape = CircleShape,
+                            color = step.color.copy(alpha = 0.1f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    step.icon,
+                                    null,
+                                    modifier = Modifier.size(40.dp),
+                                    tint = step.color
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = step.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = step.color
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = step.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+
+                // Indicadores de página
+                Row(
+                    Modifier.height(16.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    repeat(steps.size) { iteration ->
+                        val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else Color.LightGray
+                        Box(
+                            modifier = Modifier
+                                .padding(2.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                                .size(8.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (pagerState.currentPage < steps.size - 1) {
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    } else {
+                        onDismiss()
+                    }
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(if (pagerState.currentPage < steps.size - 1) stringResource(R.string.next) else stringResource(R.string.finish))
+            }
+        },
+        dismissButton = {
+            if (pagerState.currentPage > 0) {
+                TextButton(onClick = {
+                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                }) {
+                    Text("Atrás")
+                }
+            }
+        }
+    )
+}
+
+private data class HelpStepData(
+    val title: String,
+    val description: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val color: Color
+)
+

@@ -107,7 +107,7 @@ fun HomeScreen(viewModel: MainViewModel) {
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = dynamicBgColor),
                     actions = {
                         IconButton(onClick = { viewModel.showSettingsDialog = true }) { Icon(Icons.Default.Settings, "Ajustes") }
-                        IconButton(onClick = { viewModel.showLegalDialog = true }) { Icon(Icons.Default.Gavel, null) }
+                        IconButton(onClick = { viewModel.showLegalDialog = true }) { Icon(Icons.Default.Security, null) }
                         IconButton(onClick = { viewModel.showHelpDialog = true }) { Icon(Icons.AutoMirrored.Filled.HelpOutline, null) }
                     }
                 )
@@ -289,6 +289,18 @@ fun HomeScreen(viewModel: MainViewModel) {
                 isNormalizing = true,
                 onDismiss = { viewModel.isNormalizing = false }
             )
+        }
+
+        if (viewModel.showLegalDialog) {
+            LegalDialog(onDismiss = { viewModel.showLegalDialog = false })
+        }
+
+        if (viewModel.showHelpDialog) {
+            HelpDialog(onDismiss = { viewModel.showHelpDialog = false })
+        }
+
+        if (viewModel.showSettingsDialog) {
+            SettingsOverlay(viewModel = viewModel, onDismiss = { viewModel.showSettingsDialog = false })
         }
     }
 }

@@ -2,6 +2,7 @@ package com.jpm.transporttool.util
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import android.util.Log
 
 object NfcUtils {
     fun hexToBytes(s: String): ByteArray {
@@ -34,5 +35,46 @@ object NfcUtils {
 
     fun bytesToHex(bytes: ByteArray): String {
         return bytes.joinToString("") { "%02X".format(it) }
+    }
+
+    /**
+     * Convierte la fecha interna del Consorcio (Indra) a Unix Epoch.
+     * Según la especificación:
+     * - Bytes 0-1: Días transcurridos desde el 01/01/1999 (Little Endian).
+     * - Bytes 2-3: Minutos transcurridos desde la medianoche (Little Endian).
+     */
+    fun parseConsorcioDate(data: ByteArray, blockId: Int = 0): Long {
+        return try {
+            // Escudo hardware para evitar ArrayIndexOutOfBounds
+            if (data.size < 6) return System.currentTimeMillis()
+
+            // 1. FECHA: Bytes 2 y 3 leídos en BIG ENDIAN (Contador de Días)
+            val daysBigEndian = ((data[2].toInt() and 0xFF) shl 8) or (data[3].toInt() and 0xFF)
+
+            // 2. HORA: Bytes 4 y 5 leídos en LITTLE ENDIAN (Unidades de 2 segundos)
+            val timeLittleEndian = (data[4].toInt() and 0xFF) or ((data[5].toInt() and 0xFF) shl 8)
+
+            // --- CALIBRACIÓN DE LA PIEDRA ROSETTA ---
+            // Sabemos empíricamente que el día 53798 es el 09/04/2026
+            val anchorDateMs = 1775692800000L // 09/04/2026 00:00:00 UTC
+            val anchorDays = 53798
+
+            // Calculamos la diferencia de días respecto a nuestro ancla
+            val daysDifference = daysBigEndian - anchorDays
+
+            // Convertimos a milisegundos
+            val daysInMs = daysDifference.toLong() * 24 * 60 * 60 * 1000L
+            val secondsInMs = timeLittleEndian.toLong() * 2000L // Multiplicamos por 2 secs
+
+            // Timestamp final
+            val finalTimestamp = anchorDateMs + daysInMs + secondsInMs
+
+            Log.v("NFC_DATES", "Bloque $blockId -> Días: $daysBigEndian | Unidades Tiempo: $timeLittleEndian")
+
+            finalTimestamp
+        } catch (e: Exception) {
+            Log.e("NfcManager", "Error parseando fecha Consorcio", e)
+            System.currentTimeMillis()
+        }
     }
 }

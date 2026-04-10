@@ -202,6 +202,15 @@ fun HomeScreen(viewModel: MainViewModel) {
                     ) { page ->
                         val targetUid = if (page < viewModel.displayUids.size) viewModel.displayUids[page] else null
 
+                        // Actualizar el travelHistory cuando cambia la página del pager
+                        LaunchedEffect(targetUid) {
+                            if (targetUid != null) {
+                                viewModel.loadTravelsFromDb(targetUid)
+                            } else {
+                                viewModel.travelHistory = emptyList()
+                            }
+                        }
+
                         Box(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                             if (targetUid == null) {
                                 Text(

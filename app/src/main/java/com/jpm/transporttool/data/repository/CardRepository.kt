@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.jpm.transporttool.data.model.CardType
 import com.jpm.transporttool.data.model.HistoryEntry
 import com.jpm.transporttool.data.model.TransportCard
+import com.jpm.transporttool.data.model.TravelRecord
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -47,13 +48,19 @@ class CardRepository(context: Context) {
 
     fun loadHistoryForUid(uid: String): List<HistoryEntry> {
         val json = historyPrefs.getString(uid, "[]") ?: "[]"
-        val array = JSONArray(json)
-        val list = mutableListOf<HistoryEntry>()
-        for (i in 0 until array.length()) {
-            val obj = array.getJSONObject(i)
-            list.add(HistoryEntry(obj.getLong("t"), obj.getDouble("b")))
+        return try {
+            val array = JSONArray(json)
+            val list = mutableListOf<HistoryEntry>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                if (obj.has("t") && obj.has("b")) {
+                    list.add(HistoryEntry(obj.getLong("t"), obj.getDouble("b")))
+                }
+            }
+            list.sortedByDescending { it.timestamp }
+        } catch (e: Exception) {
+            emptyList()
         }
-        return list.sortedByDescending { it.timestamp }
     }
 
     fun addToHistory(uid: String, balance: Double) {
@@ -86,13 +93,70 @@ class CardRepository(context: Context) {
     }
 
     fun deleteFullHistory(uid: String) {
-        historyPrefs.edit().remove(uid).apply()
+        historyPrefs.edit().remove(uid).remove("travels_$uid").apply()
+    }
+
+    fun migrateHistory(oldUid: String, newUid: String) {
+        if (oldUid == newUid) return
+        val oldHistory = historyPrefs.getString(oldUid, null)
+        val oldTravels = historyPrefs.getString("travels_$oldUid", null)
+
+        val edit = historyPrefs.edit()
+        if (oldHistory != null) {
+            edit.putString(newUid, oldHistory)
+            edit.remove(oldUid)
+        }
+        if (oldTravels != null) {
+            edit.putString("travels_$newUid", oldTravels)
+            edit.remove("travels_$oldUid")
+        }
+        edit.apply()
+    }
+
+    fun saveTravelHistory(uid: String, travels: List<TravelRecord>) {
+        val array = JSONArray()
+        travels.forEach {
+            val obj = JSONObject()
+            obj.put("id", it.id)
+            obj.put("m", it.isMetro)
+            obj.put("d", it.isDiscounted)
+            obj.put("t", it.timestamp)
+            obj.put("a", it.amountPaid)
+            array.put(obj)
+        }
+        historyPrefs.edit().putString("travels_$uid", array.toString()).apply()
+    }
+
+    fun loadTravelHistory(uid: String): List<TravelRecord> {
+        val json = historyPrefs.getString("travels_$uid", "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            val list = mutableListOf<TravelRecord>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    TravelRecord(
+                        obj.optInt("id", 0),
+                        obj.optBoolean("m", false),
+                        obj.optBoolean("d", false),
+                        obj.optLong("t", 0L),
+                        obj.optDouble("a", 0.0)
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
     
     fun getAllHistoryUids(): List<String> {
-        return historyPrefs.all.keys.toList().sortedByDescending { 
-            loadHistoryForUid(it).firstOrNull()?.timestamp ?: 0L 
-        }
+        return historyPrefs.all.keys
+            .filter { !it.startsWith("travels_") }
+            .toList()
+            .sortedByDescending { 
+                loadHistoryForUid(it).firstOrNull()?.timestamp ?: 0L 
+            }
     }
 
     fun isDisclaimerAccepted(): Boolean {
@@ -137,6 +201,25 @@ class CardRepository(context: Context) {
             historyObj.put(uid, hArray)
         }
         root.put("history", historyObj)
+
+        val travelsObj = JSONObject()
+        getAllHistoryUids().forEach { uid ->
+            val tArray = JSONArray()
+            loadTravelHistory(uid).forEach { t ->
+                val o = JSONObject()
+                o.put("id", t.id)
+                o.put("m", t.isMetro)
+                o.put("d", t.isDiscounted)
+                o.put("t", t.timestamp)
+                o.put("a", t.amountPaid)
+                tArray.put(o)
+            }
+            if (tArray.length() > 0) {
+                travelsObj.put(uid, tArray)
+            }
+        }
+        root.put("travels", travelsObj)
+
         return root.toString()
     }
 
@@ -157,11 +240,18 @@ class CardRepository(context: Context) {
             }
             saveCardList(newList)
 
-            val historyObj = root.getJSONObject("history")
+            val historyObj = root.optJSONObject("history")
+            val travelsObj = root.optJSONObject("travels")
             val edit = historyPrefs.edit()
-            historyObj.keys().forEach { uid ->
+            
+            historyObj?.keys()?.forEach { uid ->
                 edit.putString(uid, historyObj.getJSONArray(uid).toString())
             }
+            
+            travelsObj?.keys()?.forEach { uid ->
+                edit.putString("travels_$uid", travelsObj.getJSONArray(uid).toString())
+            }
+
             edit.apply()
             true
         } catch (e: Exception) {

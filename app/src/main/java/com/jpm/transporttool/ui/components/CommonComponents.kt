@@ -1,5 +1,6 @@
 package com.jpm.transporttool.ui.components
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
@@ -14,6 +15,8 @@ import androidx.compose.material.icons.automirrored.filled.TrendingFlat
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -193,7 +196,7 @@ fun TransportCardItem(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text("Editar Tarjeta", style = MaterialTheme.typography.titleMedium, color = Color.Black)
-                            
+
                             Column {
                                 Text("Nombre", color = Color.Black.copy(0.5f), fontSize = 11.sp)
                                 BasicTextField(
@@ -321,7 +324,7 @@ fun RechargeDialog(
     val history = viewModel.loadHistoryForUid(uid)
     val lastBal = history.firstOrNull()?.balance ?: 0.0
     var amount by remember { mutableStateOf(String.format(Locale.getDefault(), "%.2f", lastBal)) }
-    
+
     val cardCfg = viewModel.savedCards.find { uid.startsWith(it.uidPrefix) }
     val hasKeyB = !cardCfg?.keyB.isNullOrBlank()
 
@@ -405,6 +408,7 @@ fun RechargeDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorySection(
     uid: String,
@@ -412,55 +416,99 @@ fun HistorySection(
     modifier: Modifier = Modifier
 ) {
     val history = remember(uid, viewModel.refreshTrigger) { viewModel.loadHistoryForUid(uid) }
-    var isExpanded by remember { mutableStateOf(false) }
-    
-    val displayHistory = if (isExpanded) history else history.take(5)
+    var isReadingExpanded by remember { mutableStateOf(false) }
+
+    // 🚨 BORRAMOS la variable currentTravelHistory de aquí
+    val displayHistory = if (isReadingExpanded) history else history.take(5)
 
     Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        SecondaryTabRow(
+            selectedTabIndex = if (viewModel.showTravelHistoryOnly) 0 else 1,
+            containerColor = Color.Transparent,
+            divider = {}
         ) {
-            Text(
-                text = stringResource(R.string.reading_history),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+            Tab(
+                selected = viewModel.showTravelHistoryOnly,
+                onClick = { viewModel.showTravelHistoryOnly = true },
+                text = { Text("Últimos Viajes", fontWeight = FontWeight.Bold) }
             )
-            
-            if (history.size > 5) {
-                TextButton(
-                    onClick = { isExpanded = !isExpanded },
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) {
-                    Text(
-                        text = if (isExpanded) "Ver menos" else "Ver todo (${history.size})",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
+            Tab(
+                selected = !viewModel.showTravelHistoryOnly,
+                onClick = { viewModel.showTravelHistoryOnly = false },
+                text = { Text("Historial Saldo", fontWeight = FontWeight.Bold) }
+            )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        if (history.isEmpty()) {
-            Text(
-                "No hay lecturas recientes",
-                modifier = Modifier.padding(vertical = 16.dp),
-                color = Color.Gray,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        } else {
-            displayHistory.forEachIndexed { index, entry ->
-                val prevBal = history.getOrNull(index + 1)?.balance
-                HistoryItem(
-                    entry = entry,
-                    prevBalance = prevBal,
-                    isDeletable = entry != history.firstOrNull(),
-                    onDelete = { viewModel.deleteHistoryItem(uid, entry) }
-                )
+        AnimatedContent(
+            targetState = viewModel.showTravelHistoryOnly,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(220, delayMillis = 90)) +
+                        scaleIn(initialScale = 0.92f, animationSpec = tween(220, delayMillis = 90)))
+                    .togetherWith(fadeOut(animationSpec = tween(90)))
+            },
+            label = "history_toggle_anim"
+        ) { showTravels ->
+            if (showTravels) {
+                // --- Vista de Viajes ---
+                Column {
+                    // ✨ SOLUCIÓN: Leemos directamente del viewModel AQUÍ DENTRO.
+                    // Esto obliga a Compose a redibujar la animación en tiempo real.
+                    if (viewModel.travelHistory.isEmpty()) {
+                        Text(
+                            "No se han detectado viajes en esta tarjeta",
+                            modifier = Modifier.padding(vertical = 16.dp),
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        viewModel.travelHistory.forEach { record ->
+                            TravelHistoryItem(record = record)
+                        }
+                    }
+                }
+            } else {
+                // ... (El código de historial de saldo hacia abajo se queda igual) ...
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (history.size > 5) {
+                            TextButton(
+                                onClick = { isReadingExpanded = !isReadingExpanded },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text(
+                                    text = if (isReadingExpanded) "Ver menos" else "Ver todo (${history.size})",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                    }
+
+                    if (history.isEmpty()) {
+                        Text(
+                            "No hay lecturas de saldo recientes",
+                            modifier = Modifier.padding(vertical = 16.dp),
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        displayHistory.forEachIndexed { index, entry ->
+                            val prevBal = history.getOrNull(index + 1)?.balance
+                            HistoryItem(
+                                entry = entry,
+                                prevBalance = prevBal,
+                                isDeletable = entry != history.firstOrNull(),
+                                onDelete = { viewModel.deleteHistoryItem(uid, entry) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }

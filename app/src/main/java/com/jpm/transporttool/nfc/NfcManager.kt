@@ -123,54 +123,11 @@ class NfcManager(private val activity: Activity, private val viewModel: MainView
             mifare.connect()
             val uid = NfcUtils.bytesToHex(tag.id).uppercase()
             
-            var cardType = CardType.UNKNOWN
-
-            val authS8 = mifare.authenticateSectorWithKeyA(SECTOR_8, NfcUtils.hexToBytes(KEY_A_SECTOR_8))
-            if (authS8) {
-                val contractData = mifare.readBlock(BLOCK_34)
-                val firstByte = contractData[0].toInt() and 0xFF
-                val subType = contractData[8].toInt() and 0xFF
-
-                cardType = when (subType) {
-                    0x03, 0x04 -> CardType.JOVEN
-                    0x01 -> {
-                        if (firstByte == 0x58) CardType.FAMILIANUM
-                        else CardType.NORMAL
-                    }
-                    else -> {
-                        when (firstByte) {
-                            0x40 -> CardType.JOVEN
-                            0x58 -> CardType.FAMILIANUM
-                            0x18, 0x60 -> CardType.NORMAL
-                            else -> CardType.UNKNOWN
-                        }
-                    }
-                }
-            }
+            val cardType = detectCardType(mifare)
 
             val authS9 = mifare.authenticateSectorWithKeyA(SECTOR_9, NfcUtils.hexToBytes(KEY_A_SECTOR_9))
             if (authS9) {
                 val contractData36 = mifare.readBlock(BLOCK_36)
-                val firstByte36 = contractData36[0].toInt() and 0xFF
-                
-                if (cardType == CardType.UNKNOWN) {
-                    val subType36 = contractData36[8].toInt() and 0xFF
-                    cardType = when (subType36) {
-                        0x03, 0x04 -> CardType.JOVEN
-                        0x01 -> {
-                            if (firstByte36 == 0x58) CardType.FAMILIANUM
-                            else CardType.NORMAL
-                        }
-                        else -> {
-                            when (firstByte36) {
-                                0x40 -> CardType.JOVEN
-                                0x58 -> CardType.FAMILIANUM
-                                0x18, 0x60 -> CardType.NORMAL
-                                else -> CardType.UNKNOWN
-                            }
-                        }
-                    }
-                }
 
                 val data = mifare.readBlock(BLOCK_37)
                 val bal = NfcUtils.parseBalance(data)
@@ -357,6 +314,31 @@ class NfcManager(private val activity: Activity, private val viewModel: MainView
         } finally {
             mifare.close()
         }
+    }
+
+    private fun detectCardType(mifare: MifareClassic): CardType {
+        val SECTOR_7 = 7
+        val BLOCK_28 = 28
+        // Llave confirmada por ingeniería inversa para el Sector 7
+        val keyA = NfcUtils.hexToBytes("B0BCB22DCBA3")
+
+        try {
+            if (mifare.authenticateSectorWithKeyA(SECTOR_7, keyA)) {
+                val block28 = mifare.readBlock(BLOCK_28)
+
+                // Lógica infalible: Si el primer byte es 0x01, es tarjeta personalizada (Joven)
+                if (block28 != null && block28.isNotEmpty() && block28[0] == 0x01.toByte()) {
+                    return CardType.JOVEN
+                }
+            } else {
+                Log.e("NFC_PROFILE", "Fallo autenticación Sector 7 para perfil")
+            }
+        } catch (e: Exception) {
+            Log.e("NFC_PROFILE", "Error leyendo perfil en bloque 28", e)
+        }
+
+        // Si no tiene el flag 0x01, o si hay cualquier error de lectura, es Normal por defecto
+        return CardType.NORMAL
     }
 
     private fun parseTravelBlock(blockId: Int, data: ByteArray): TravelRecord? {

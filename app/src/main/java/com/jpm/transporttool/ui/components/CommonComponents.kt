@@ -144,19 +144,18 @@ fun TransportCardItem(
 
                 Column(
                     modifier = Modifier.padding(
-                        start = if (isJoven) 20.dp else 24.dp,
-                        top = if (isJoven) 50.dp else 24.dp
+                        start = 24.dp,
+                        top = if (isJoven) 64.dp else 24.dp
                     )
                 ) {
                     if (!isJoven) {
                         Text(name, color = contentColor.copy(0.7f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(4.dp))
                     }
                     Text(
                         text = stringResource(R.string.balance_format, balance),
                         color = contentColor,
-                        fontSize = if (isJoven) 24.sp else 38.sp,
-                        fontWeight = FontWeight.ExtraBold
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black
                     )
                 }
 

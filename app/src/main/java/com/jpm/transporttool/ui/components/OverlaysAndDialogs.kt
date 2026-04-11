@@ -41,6 +41,7 @@ import com.jpm.transporttool.data.model.TransportCard
 import com.jpm.transporttool.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.TimeZone
 
 @Composable
 fun SettingsOverlay(viewModel: MainViewModel, onDismiss: () -> Unit) {
@@ -137,18 +138,20 @@ fun SettingsOverlay(viewModel: MainViewModel, onDismiss: () -> Unit) {
                     shape = RoundedCornerShape(12.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Modo Pro", fontWeight = FontWeight.Bold)
-                            Text("Permite edición de llaves y saldo", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Modo Pro", fontWeight = FontWeight.Bold)
+                                Text("Permite edición de llaves y saldo", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                            Switch(
+                                checked = viewModel.isProMode,
+                                onCheckedChange = { viewModel.toggleProMode() }
+                            )
                         }
-                        Switch(
-                            checked = viewModel.isProMode,
-                            onCheckedChange = { viewModel.toggleProMode() }
-                        )
                     }
                 }
 
@@ -202,6 +205,19 @@ fun SettingsOverlay(viewModel: MainViewModel, onDismiss: () -> Unit) {
                         viewModel.showLegalDialog = true
                     }
                 )
+
+                if (viewModel.isProMode) {
+                    SettingsItem(
+                        icon = Icons.Default.BugReport,
+                        title = "Herramientas de Desarrollador",
+                        subtitle = "Depuración y reparación de bloques",
+                        color = MaterialTheme.colorScheme.error,
+                        onClick = { 
+                            onDismiss()
+                            viewModel.showDevWarning = true 
+                        }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 TextButton(
@@ -512,93 +528,6 @@ fun SuccessOverlay(amount: Float, isRepair: Boolean = false, onDismiss: () -> Un
     }
 }
 
-@Composable
-fun CardOptionsOverlay(
-    uid: String,
-    cardCfg: TransportCard?,
-    onDismiss: () -> Unit,
-    onRecharge: (String) -> Unit,
-    onConfigure: (String, TransportCard?) -> Unit,
-    onDeleteConfig: (TransportCard) -> Unit,
-    onDeleteHistory: (String) -> Unit
-) {
-    val scale by animateFloatAsState(targetValue = 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy), label = "overlay_scale")
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.35f))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onDismiss() },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .width(300.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(8.dp)
-                .clickable(enabled = false) { }
-        ) {
-            Text(
-                text = cardCfg?.name ?: stringResource(R.string.card_detected),
-                modifier = Modifier.padding(16.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(R.string.card_id, uid),
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
-            )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-            if (cardCfg != null && cardCfg.keyB.isNotBlank()) {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.modify_balance), fontWeight = FontWeight.Bold) },
-                    leadingContent = { Icon(Icons.Default.Edit, null) },
-                    modifier = Modifier.clickable {
-                        onDismiss()
-                        onRecharge(uid)
-                    }
-                )
-            }
-
-            ListItem(
-                headlineContent = { Text(if (cardCfg != null) stringResource(R.string.customize_card) else stringResource(R.string.configure_card)) },
-                leadingContent = { Icon(Icons.Default.Settings, null) },
-                modifier = Modifier.clickable {
-                    onDismiss()
-                    onConfigure(uid, cardCfg)
-                }
-            )
-
-            if (cardCfg != null) {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.delete_config), color = Color.Red) },
-                    leadingContent = { Icon(Icons.Default.Delete, null, tint = Color.Red) },
-                    modifier = Modifier.clickable {
-                        onDismiss()
-                        onDeleteConfig(cardCfg)
-                    }
-                )
-            }
-
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.delete_history), color = Color.Red) },
-                leadingContent = { Icon(Icons.Default.History, null, tint = Color.Red) },
-                modifier = Modifier.clickable {
-                    onDismiss()
-                    onDeleteHistory(uid)
-                }
-            )
-        }
-    }
-}
 
 @Composable
 fun LegalDialog(onDismiss: () -> Unit) {
@@ -804,6 +733,419 @@ fun HelpDialog(onDismiss: () -> Unit) {
             }
         }
     )
+}
+
+@Composable
+fun DevOptionsDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
+    val scrollState = rememberScrollState()
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .padding(24.dp)
+            .fillMaxWidth(),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.DeveloperMode, 
+                    null, 
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    "Opciones de Desarrollador", 
+                    fontWeight = FontWeight.ExtraBold,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(scrollState)
+            ) {
+
+                Text("Integridad de la tarjeta", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                val integrityColor = if (viewModel.isSyncError) Color.Red else Color(0xFF4CAF50)
+                Surface(
+                    color = integrityColor.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, integrityColor.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (viewModel.isSyncError) Icons.Default.Error else Icons.Default.CheckCircle,
+                                null,
+                                tint = integrityColor
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    if (viewModel.isSyncError) "Sincronización comprometida" else "Sincronización OK",
+                                    fontWeight = FontWeight.Bold,
+                                    color = integrityColor
+                                )
+                                Text(
+                                    if (viewModel.isSyncError) "Los bloques de respaldo no coinciden." 
+                                    else "Los sectores de saldo están sincronizados.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        
+                        if (viewModel.isSyncError) {
+                            HorizontalDivider(color = integrityColor.copy(alpha = 0.2f))
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    "Discrepancia detectada entre B37 y B38:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Red
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                val b37Bytes = com.jpm.transporttool.util.NfcUtils.hexToBytes(viewModel.block37Hex.replace(" ", ""))
+                                val b38Bytes = com.jpm.transporttool.util.NfcUtils.hexToBytes(viewModel.block38Hex.replace(" ", ""))
+                                
+                                val b37Valid = com.jpm.transporttool.util.NfcUtils.validateValueBlockStructure(b37Bytes)
+                                val b38Valid = com.jpm.transporttool.util.NfcUtils.validateValueBlockStructure(b38Bytes)
+
+                                BlockComparisonRow(
+                                    label = "B37 (Main) - ${if(b37Valid) "Formato Válido" else "Formato Inválido"}", 
+                                    hex = viewModel.block37Hex,
+                                    isError = !b37Valid
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                BlockComparisonRow(
+                                    label = "B38 (Back) - ${if(b38Valid) "Formato Válido" else "Formato Inválido"}", 
+                                    hex = viewModel.block38Hex,
+                                    isError = !b38Valid || viewModel.isSyncError
+                                )
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = { 
+                                        onDismiss()
+                                        viewModel.normalizeCard() 
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Icon(Icons.Default.Build, null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Reparar estructura (Sincronizar)", fontSize = 12.sp)
+                                }
+                            }
+                        } else {
+                            HorizontalDivider(color = integrityColor.copy(alpha = 0.2f))
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Bloque 37 (Main): OK", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                    Text("Bloque 38 (Back): OK", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                val bytes = com.jpm.transporttool.util.NfcUtils.hexToBytes(viewModel.block37Hex.replace(" ", ""))
+                                val isValidFormat = com.jpm.transporttool.util.NfcUtils.validateValueBlockStructure(bytes)
+                                
+                                Text(
+                                    "ESTADO ESTRUCTURAL: ${if(isValidFormat) "MIFARE VALUE BLOCK" else "RAW DATA"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if(isValidFormat) Color(0xFF4CAF50) else Color.Gray,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                
+                                if (isValidFormat) {
+                                    // Visualización de la estructura de colores envolviendo los bytes
+                                    val hexString = viewModel.block37Hex.ifBlank { "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00" }
+                                    val hexParts = hexString.split(" ")
+                                    
+                                    Column {
+                                        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                                            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(8),
+                                            modifier = Modifier.fillMaxWidth().height(100.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            items(hexParts.size) { index ->
+                                                val bgColor = when (index) {
+                                                    in 0..3, in 8..11 -> Color(0xFF2196F3) // Saldo
+                                                    in 4..7 -> Color(0xFFFF9800)          // ~Saldo
+                                                    12, 14 -> Color(0xFF9C27B0)           // Addr
+                                                    13, 15 -> Color(0xFFFFEB3B)           // ~Addr
+                                                    else -> Color.Transparent
+                                                }
+                                                Surface(
+                                                    color = bgColor.copy(alpha = 0.15f),
+                                                    shape = RoundedCornerShape(2.dp),
+                                                    border = BorderStroke(1.dp, bgColor.copy(alpha = 0.5f))
+                                                ) {
+                                                    Text(
+                                                        text = hexParts[index],
+                                                        modifier = Modifier.padding(vertical = 4.dp),
+                                                        textAlign = TextAlign.Center,
+                                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        
+                                        // Leyenda
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            LegendItem("Saldo", Color(0xFF2196F3))
+                                            LegendItem("Invertido", Color(0xFFFF9800))
+                                            LegendItem("Dirección", Color(0xFF9C27B0))
+                                            LegendItem("~Dir", Color(0xFFFFEB3B))
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        viewModel.block37Hex.ifBlank { "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00" },
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        lineHeight = 13.sp,
+                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text("Firma y Seguridad (Bloque 36)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                val sigColor = if (viewModel.isSignatureError) Color.Red else Color(0xFF4CAF50)
+                Surface(
+                    color = sigColor.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, sigColor.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (viewModel.isSignatureError) Icons.Default.GppBad else Icons.Default.VerifiedUser,
+                                null,
+                                tint = sigColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                if (viewModel.isSignatureError) "Firma Digital Inválida" else "Firma Digital Válida",
+                                fontWeight = FontWeight.Bold,
+                                color = sigColor
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Contenido del Bloque 36:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text(
+                            viewModel.block36Hex.ifBlank { "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00" },
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        
+                        val b36Clean = viewModel.block36Hex.replace(" ", "")
+                        if (b36Clean.length >= 32) {
+                            val counter = com.jpm.transporttool.util.NfcUtils.getTransactionCounter(com.jpm.transporttool.util.NfcUtils.hexToBytes(b36Clean))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Contador: $counter", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            
+                            val currentMac = b36Clean.substring(18, 32).uppercase()
+                            Text("MAC Actual: $currentMac", style = MaterialTheme.typography.labelSmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                        }
+
+                        if (viewModel.isSignatureError || viewModel.isCounterError) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            if (viewModel.isCounterError) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "¡ALERTA! El contador no es 49. Esto invalidará la firma en validadores oficiales.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+
+                            Button(
+                                onClick = { 
+                                    if (viewModel.isCounterError) {
+                                        viewModel.showCounterFixConfirm = true
+                                    } else {
+                                        onDismiss()
+                                        viewModel.normalizeCard()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(if (viewModel.isCounterError) Icons.Default.HistoryEdu else Icons.Default.Security, null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (viewModel.isCounterError) "Corregir Contador y Firma (B36)" else "Recalcular Firma (B36)", 
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (viewModel.showCounterFixConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { viewModel.showCounterFixConfirm = false },
+                        title = { Text("¿Fijar contador a 49?") },
+                        text = { Text("Se recomienda mantener el contador original de la tarjeta. Solo cámbialo a 49 si la tarjeta no funciona en validadores oficiales. Esta acción es irreversible.") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    viewModel.showCounterFixConfirm = false
+                                    onDismiss()
+                                    viewModel.normalizeCard()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Fijar a 49")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { viewModel.showCounterFixConfirm = false }) {
+                                Text("Cancelar")
+                            }
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text("Historial Técnico de Viajes", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (viewModel.travelHistory.isEmpty()) {
+                    Text("No hay registros de viajes en esta tarjeta.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                } else {
+                    val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                    sdf.timeZone = TimeZone.getTimeZone("UTC")
+                    viewModel.travelHistory.forEach { record ->
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Bloque: ${record.id}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(sdf.format(java.util.Date(record.timestamp)), fontSize = 12.sp, color = Color.Gray)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        if (record.isMetro) Icons.Default.Subway else Icons.Default.DirectionsBus,
+                                        null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        if (record.isMetro) "Metro" else "Autobús",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        "-${String.format("%.2f€", record.amountPaid)}",
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Red,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("UID: ${viewModel.focusedUid}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text("CERRAR", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+fun LegendItem(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, color = Color.Gray)
+    }
+}
+
+@Composable
+fun BlockComparisonRow(label: String, hex: String, isError: Boolean = false) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = if(isError) Color.Red else Color.Gray)
+        Surface(
+            color = if(isError) Color.Red.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier.fillMaxWidth(),
+            border = if(isError) BorderStroke(1.dp, Color.Red.copy(alpha = 0.2f)) else null
+        ) {
+            Text(
+                hex.ifBlank { "Sin datos" },
+                modifier = Modifier.padding(4.dp),
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontSize = 10.sp,
+                color = if(isError) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }
 
 private data class HelpStepData(

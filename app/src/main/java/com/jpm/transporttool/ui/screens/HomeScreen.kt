@@ -107,7 +107,6 @@ fun HomeScreen(viewModel: MainViewModel) {
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = dynamicBgColor),
                     actions = {
                         IconButton(onClick = { viewModel.showSettingsDialog = true }) { Icon(Icons.Default.Settings, "Ajustes") }
-                        IconButton(onClick = { viewModel.showLegalDialog = true }) { Icon(Icons.Default.Security, null) }
                         IconButton(onClick = { viewModel.showHelpDialog = true }) { Icon(Icons.AutoMirrored.Filled.HelpOutline, null) }
                     }
                 )
@@ -221,7 +220,7 @@ fun HomeScreen(viewModel: MainViewModel) {
                             } else {
                                 Column {
                                     // Indicadores de estado físico de la tarjeta (solo si es la enfocada actualmente)
-                                    if (targetUid == viewModel.focusedUid) {
+                                    if (targetUid == viewModel.focusedUid && viewModel.isProMode) {
                                         if (viewModel.isCardCorrupted) {
                                             Surface(
                                                 modifier = Modifier.padding(bottom = 16.dp).fillMaxWidth(),
@@ -235,14 +234,21 @@ fun HomeScreen(viewModel: MainViewModel) {
                                                     Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                                                     Spacer(modifier = Modifier.width(12.dp))
                                                     Column(modifier = Modifier.weight(1f)) {
-                                                        Text("Datos inconsistentes", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                                        val errorMsg = when {
+                                                            viewModel.isSyncError && viewModel.isSignatureError -> "Sincronización y Firma fallidas"
+                                                            viewModel.isSyncError -> "Error de sincronización (B37/B38)"
+                                                            viewModel.isSignatureError -> "Firma digital no válida (MAC)"
+                                                            viewModel.isCounterError -> "Contador de transacciones incorrecto"
+                                                            else -> "Datos inconsistentes"
+                                                        }
+                                                        Text(errorMsg, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
                                                     }
                                                     Button(
-                                                        onClick = { viewModel.normalizeCard() },
+                                                        onClick = { viewModel.showDevWarning = true },
                                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                                     ) {
-                                                        Text("Reparar", style = MaterialTheme.typography.labelMedium)
+                                                        Text("Detalles", style = MaterialTheme.typography.labelMedium)
                                                     }
                                                 }
                                             }
@@ -310,6 +316,42 @@ fun HomeScreen(viewModel: MainViewModel) {
 
         if (viewModel.showSettingsDialog) {
             SettingsOverlay(viewModel = viewModel, onDismiss = { viewModel.showSettingsDialog = false })
+        }
+
+        if (viewModel.showDevWarning) {
+            AlertDialog(
+                onDismissRequest = { viewModel.showDevWarning = false },
+                title = { Text("Acceso a Datos Sensibles") },
+                text = { Text("Vas a acceder al menú de diagnóstico técnico. Estos datos son sensibles y modificar los bloques incorrectamente puede invalidar tu tarjeta permanentemente. ¿Confirmas que sabes lo que estás haciendo?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.showDevWarning = false
+                            viewModel.showDevOptionsDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Confirmar y Entrar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.showDevWarning = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        if (viewModel.showDevOptionsDialog) {
+            if (viewModel.isProMode) {
+                DevOptionsDialog(
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.showDevOptionsDialog = false }
+                )
+            } else {
+                // Reset flag if pro mode was disabled
+                viewModel.showDevOptionsDialog = false
+            }
         }
     }
 }

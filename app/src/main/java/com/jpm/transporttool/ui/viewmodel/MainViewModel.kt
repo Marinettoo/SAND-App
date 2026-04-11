@@ -38,8 +38,18 @@ class MainViewModel(private val repository: CardRepository) : ViewModel() {
     var showHelpDialog by mutableStateOf(false)
     var showLegalDialog by mutableStateOf(false)
     var showSettingsDialog by mutableStateOf(false)
+    var showDevOptionsDialog by mutableStateOf(false)
+    var showDevWarning by mutableStateOf(false)
 
     var isCardCorrupted by mutableStateOf(false)
+    var isSyncError by mutableStateOf(false)
+    var isSignatureError by mutableStateOf(false)
+    var isCounterError by mutableStateOf(false)
+    var showCounterFixConfirm by mutableStateOf(false)
+    var block36Hex by mutableStateOf("")
+    var block37Hex by mutableStateOf("")
+    var block38Hex by mutableStateOf("")
+    var currentBalance by mutableFloatStateOf(0f)
     var isNormalizing by mutableStateOf(false)
     var isRepairSuccess by mutableStateOf(false)
 
@@ -75,36 +85,49 @@ class MainViewModel(private val repository: CardRepository) : ViewModel() {
 
     fun loadDataAndRefreshDisplay() {
         val cards = repository.getSavedCards()
-        val allUids = repository.getAllHistoryUids()
+        val allUids = repository.getAllHistoryUids().map { it.replace(" ", "").uppercase() }.distinct()
 
         val displayList = mutableListOf<String>()
-        // Primero las tarjetas guardadas
+        // Primero las tarjetas guardadas, normalizando para evitar duplicados por espacios
         cards.forEach { card ->
-            val fullUid = allUids.find { it.startsWith(card.uidPrefix) } ?: card.uidPrefix
-            if (!displayList.contains(fullUid)) displayList.add(fullUid)
+            val normPrefix = card.uidPrefix.replace(" ", "").uppercase()
+            val fullUidFromHistory = allUids.find { it.startsWith(normPrefix) } ?: normPrefix
+            if (!displayList.contains(fullUidFromHistory)) {
+                displayList.add(fullUidFromHistory)
+            }
         }
+        
         // Luego los UIDs que solo están en el historial
-        allUids.forEach { uid ->
-            val isSaved = cards.any { uid.startsWith(it.uidPrefix) }
-            if (!isSaved && !displayList.contains(uid)) displayList.add(uid)
+        allUids.forEach { historyUid ->
+            val isAlreadyInList = displayList.any { it.startsWith(historyUid) || historyUid.startsWith(it) }
+            if (!isAlreadyInList) {
+                displayList.add(historyUid)
+            }
         }
         
         savedCards = cards
         historyUids = allUids
         displayUids = displayList
-        refreshTrigger++ // Aseguramos que se dispare la recomposición
+        refreshTrigger++
     }
 
-    fun saveNewCard(card: TransportCard) {
-        val existingIndex = savedCards.indexOfFirst { it.uidPrefix == card.uidPrefix }
-        val newList = if (existingIndex != -1) {
-            savedCards.toMutableList().apply {
-                this[existingIndex] = card
-            }
-        } else {
-            savedCards + card
+    fun saveNewCard(card: TransportCard, oldPrefixToRemove: String? = null) {
+        val currentCards = savedCards.toMutableList()
+        val newUidNorm = card.uidPrefix.replace(" ", "").uppercase()
+        
+        // Limpiar cualquier versión previa que coincida (con o sin espacios, o el prefijo antiguo)
+        currentCards.removeAll { 
+            val itNorm = it.uidPrefix.replace(" ", "").uppercase()
+            itNorm == newUidNorm || (oldPrefixToRemove != null && it.uidPrefix == oldPrefixToRemove)
         }
-        repository.saveCardList(newList)
+
+        if (oldPrefixToRemove != null && oldPrefixToRemove.replace(" ", "") != newUidNorm) {
+            repository.migrateHistory(oldPrefixToRemove, card.uidPrefix)
+        }
+
+        currentCards.add(card.copy(uidPrefix = newUidNorm)) // Guardamos siempre normalizado
+        
+        repository.saveCardList(currentCards)
         loadDataAndRefreshDisplay()
     }
 
